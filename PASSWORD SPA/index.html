@@ -1,0 +1,226 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>Password Manager</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <!-- style of page  -->  
+    <style>
+        body {
+         background-color: #F26BE4;        
+         font-family: Arial, sans-serif;
+            display: flex;                             
+     justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+         padding: 20px;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
+            margin-bottom: 20px;
+        }
+                
+        input, button {
+            font-size: 1rem;
+            padding: 10px;            /*  style of buttons and text boxes */
+            margin-bottom: 10px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+    .password-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .password-container input {
+            flex: 1;
+            margin: 0;
+        }
+
+        .password-container button {
+            margin-left: 5px;
+            width: auto;
+        }
+
+        #passwordStrength {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+     #jsonPasswords p {
+            background-color: #f1f1f1;
+            padding: 8px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container" id="mainContainer"></div>  <!-- dynamically renders pages -->
+
+<script>
+    const mainContainer = document.getElementById("mainContainer");
+    const secretKey = "super-secret-key";      /* the key which is used for the AES encryption - KEEP SECURE */
+ let uploadedUsers = [];
+
+    const encrypt = (text) => CryptoJS.AES.encrypt(text, secretKey).toString();  /* encryts using AES encryption */
+    const decrypt = (cipher) => CryptoJS.AES.decrypt(cipher, secretKey).toString(CryptoJS.enc.Utf8); /* decrypts using AES encryption */
+
+const toggleVisibility = (inputEl) => {    /* toggles pw visibility to hide password from your surroundings */
+        inputEl.type = inputEl.type === "password" ? "text" : "password"; 
+    };
+
+    const renderPage = (html) => mainContainer.innerHTML = html;  /* renders page into microcontainer */
+
+const showRegisterPage = () => {   /* displays page on launch, promting user to login or register their account */
+      renderPage(`
+          <h2>Create Account</h2>
+            <input type="text" id="regUsername" placeholder="Choose a username">
+        <div class="password-container">
+                <input type="password" id="regPassword" placeholder="Choose a password">
+             <button onclick="toggleVisibility(document.getElementById('regPassword'))">View</button>
+            </div>
+            <div id="passwordStrength"></div>
+         <button onclick="registerUser()">Register</button>
+            <button onclick="showLoginPage()">Login</button>
+        `);
+        document.getElementById("regPassword").addEventListener("input", checkPasswordStrength);
+};
+
+const showLoginPage = () => { /* login page where users will upload their stored json file to the page and enter their details */
+        renderPage(`
+         <h2>Login</h2>
+            <input type="file" id="userFile" accept="application/json">
+        <input type="text" id="loginUsername" placeholder="Username">
+            <div class="password-container">
+            <input type="password" id="loginPassword" placeholder="Password">
+                <button onclick="toggleVisibility(document.getElementById('loginPassword'))">View</button>
+         </div>
+            <button onclick="loginUser()">Login</button>
+            <p id="loginMessage" style="color:red;"></p>
+        `);
+        document.getElementById("userFile").addEventListener("change", handleUserUpload);
+    };
+
+    const checkPasswordStrength = () => {
+    const password = document.getElementById("regPassword").value;   /* password strength indictor - gives the end user feedback throughout chosing their password */
+        const strengthText = document.getElementById("passwordStrength");
+        const strong = password.length >= 8 && /[A-Z]/.test(password) && /[!@%^&*]/.test(password);
+        const medium = password.length >= 8 && (/[A-Z]/.test(password) || /[!$%^&*]/.test(password));
+
+        strengthText.textContent = strong ? "Strong" : medium ? "Medium" : "Weak";
+        strengthText.style.color = strong ? "green" : medium ? "orange" : "red";
+    };
+
+    const handleUserUpload = (e) => {   /* processes the users uploaded JSON file */ 
+    const reader = new FileReader();
+        reader.onload = () => {
+            try {
+                const allPasswords = JSON.parse(reader.result);  /* parses json file and uses for authernication */
+                uploadedUsers = Array.isArray(allPasswords) ? allPasswords : [];
+            } catch {
+                alert("Invalid file"); /* if file is invalied, displays error message */
+            }
+        };
+        reader.readAsText(e.target.files[0]);
+    };
+
+    const registerUser = () => {  /* registers a new user, exporting the data locally to a json which the user will use to log in */
+const username = document.getElementById("regUsername").value.trim();
+        const password = document.getElementById("regPassword").value.trim();
+        if (!username || !password) return alert("Please fill out all fields.");
+
+        const encrypted = encrypt(password); /* encrypts the login information and stores in both local browser and local pc storage */
+        const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
+        users.push({ username, password: encrypted });
+        localStorage.setItem("registeredUsers", JSON.stringify(users));
+
+        const blob = new Blob([JSON.stringify(users)], { type: "application/json" });
+        const link = document.createElement("a");
+     link.href = URL.createObjectURL(blob);
+    link.download = "users.json";
+    link.click();
+        URL.revokeObjectURL(link.href);
+
+        alert("Account created.");
+        showLoginPage();
+};
+
+    const loginUser = () => { /* allows access based on whether or not the login information matches that of the JSON file */
+        const username = document.getElementById("loginUsername").value.trim();
+        const password = document.getElementById("loginPassword").value.trim();
+
+        const match = uploadedUsers.find(user => user.username === username && decrypt(user.password) === password);
+        if (match) return showPasswordManager();
+        document.getElementById("loginMessage").textContent = "Incorrect username or password.";
+ };
+
+    const showPasswordManager = () => {   /* upon successful login passwords manager is shown */ 
+        renderPage(`
+         <h2>Saved Passwords</h2>
+        <input type="text" id="website" placeholder="Website">
+            <input type="text" id="username" placeholder="Username">
+            <div class="password-container">
+                <input type="password" id="password" placeholder="Password">
+            <button onclick="toggleVisibility(document.getElementById('password'))">View</button>
+            </div>
+            <button onclick="savePassword()">Save</button>
+         <button onclick="downloadPasswords()">Download</button>
+            <h3>Stored Login Information</h3>
+            <div id="jsonPasswords"></div>
+        `);
+        loadStoredPasswords();  
+    };
+
+    const savePassword = () => {   /* saves the entered login information into the local browser storage - encrypted */
+    const website = document.getElementById("website").value;
+        const username = document.getElementById("username").value;
+ const password = encrypt(document.getElementById("password").value);
+        const allPasswords = JSON.parse(localStorage.getItem("passwords") || "[]");
+     allPasswords.push({ website, username, password });
+        localStorage.setItem("passwords", JSON.stringify(allPasswords));
+        alert("Saved.");
+        loadStoredPasswords();
+ };
+
+ const loadStoredPasswords = () => { /* displays saved credentials onto the page and provides visibility toggle for entering and for loaded passwords */
+        const allPasswords = JSON.parse(localStorage.getItem("passwords") || "[]");
+        const container = document.getElementById("jsonPasswords");
+        container.innerHTML = "";
+        allPasswords.forEach((item, i) => {
+            const decrypted = decrypt(item.password) || "(Error)";
+            container.innerHTML += `
+                <p>
+                 <strong>${item.website}</strong><br>
+                    User: ${item.username}<br>
+                    Password: <input type="password" value="${decrypted}" id="pw${i}" readonly>
+                    <button onclick="toggleVisibility(document.getElementById('pw${i}'))">View</button>  
+         </p>
+            `;
+        });
+    };
+
+    const downloadPasswords = () => {  /* allows the user to export their saved passwords into a local JSON file inwhich the passwords are encrypted */
+        const data = localStorage.getItem("passwords");
+const blob = new Blob([data], { type: "application/json" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "passwords.json";
+        link.click();
+        URL.revokeObjectURL(link.href);
+};
+
+showRegisterPage();
+</script>
+</body>
+</html>
